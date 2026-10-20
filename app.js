@@ -70,7 +70,9 @@ class GhError extends Error { constructor(status, msg) { super(msg); this.status
 async function gh(p, opts = {}) {
   let r;
   try {
-    r = await fetch(`https://api.github.com/repos/${S.repo}/${p}`, Object.assign({ cache: "no-store" }, opts, {
+    // no trailing slash: GitHub answers 404 to ".../repos/owner/name/"
+    const url = `https://api.github.com/repos/${S.repo}` + (p ? `/${p}` : "");
+    r = await fetch(url, Object.assign({ cache: "no-store" }, opts, {
       headers: Object.assign({ Authorization: `Bearer ${S.token}`, Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28" }, opts.headers || {}) }));
   } catch { throw new GhError(0, "offline"); }
