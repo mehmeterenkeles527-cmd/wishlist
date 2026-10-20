@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Wishlist</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wishlist">
+<meta name="theme-color" content="#EDEDEF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0B0C" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter>
+</svg>
+
+<!-- first run: connect to GitHub -->
+<section id="setup" class="screen" hidden>
+  <div class="setup-inner">
+    <img src="icon-192.png" class="setup-logo" alt="">
+    <h1 class="display">Wishlist</h1>
+    <p class="lead">Listen GitHub'daki gizli deponda duruyor. Bu telefona bir kere anahtar vermen yeterli.</p>
+    <ol class="steps">
+      <li><a id="token-link" class="link" target="_blank" rel="noopener">GitHub'da anahtar oluştur</a> ve sayfadaki adımları izle.</li>
+      <li>Oluşan <b>github_pat_…</b> ile başlayan anahtarı kopyala, aşağıya yapıştır.</li>
+    </ol>
+    <label class="field-label" for="token-input">Anahtar</label>
+    <input id="token-input" class="field" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…">
+    <label class="field-label" for="repo-input">Depo</label>
+    <input id="repo-input" class="field" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="connect-btn" class="chrome-btn wide">Bağlan</button>
+    <p id="setup-error" class="error" hidden></p>
+  </div>
+</section>
+
+<!-- main app -->
+<section id="app" class="screen" hidden>
+  <header class="top">
+    <div class="grain"></div>
+    <div class="top-row">
+      <img src="logo-96.png" class="top-logo" alt="">
+      <h1 class="display" id="title">Wishlist</h1>
+      <button id="refresh-btn" class="icon-btn" aria-label="Yenile"><svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5V8h-3.5"/></svg></button>
+    </div>
+    <div id="sync-line" class="sync-line"></div>
+  </header>
+
+  <main id="view-list" class="view">
+    <div class="search-wrap"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg>
+      <input id="search" type="search" placeholder="Ara" autocomplete="off"></div>
+    <div id="filters" class="chips"></div>
+    <div id="crumbs" class="crumbs"></div>
+    <div id="cats" class="chips cats"></div>
+    <div id="summary" class="summary"></div>
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty" hidden></div>
+  </main>
+
+  <main id="view-dash" class="view" hidden></main>
+  <main id="view-settings" class="view" hidden></main>
+
+  <button id="fab" class="fab chrome-btn" aria-label="Ürün ekle"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+
+  <nav class="tabbar">
+    <button data-tab="list" class="tab active"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/></svg><span>Liste</span></button>
+    <button data-tab="dash" class="tab"><svg viewBox="0 0 24 24"><path d="M4 20h16M7.5 17v-4M12 17V8M16.5 17v-6"/></svg><span>Özet</span></button>
+    <button data-tab="settings" class="tab"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg><span>Ayarlar</span></button>
+  </nav>
+</section>
+
+<!-- product detail -->
+<section id="detail" class="sheet" hidden aria-modal="true" role="dialog"></section>
+<!-- add sheet -->
+<section id="add" class="sheet small" hidden aria-modal="true" role="dialog"></section>
+<div id="scrim" class="scrim" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="merge.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
