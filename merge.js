@@ -1,7 +1,9 @@
 // Port of sync_model.py (Mac app). Keep the two in step; tests/test_sync.py compares them.
 (function (root) {
-  const USER_FIELDS = ["url", "key", "title", "category_id", "favorite", "notes", "target_price", "bought", "added_at"];
-  const CHECK_FIELDS = ["store", "image_urls", "list_price", "in_stock", "last_checked", "status", "error", "target_notified"];
+  const USER_FIELDS = ["url", "key", "title", "category_id", "favorite", "notes", "target_price", "bought", "added_at",
+    "target_pct", "priority", "track_size", "still_want_at", "return_days"];
+  const CHECK_FIELDS = ["store", "image_urls", "list_price", "in_stock", "last_checked", "status", "error", "target_notified",
+    "sizes", "basket_price", "free_ship_over", "size_notified", "return_notified_price"];
   const LOCAL_ONLY = ["images"];
   const TOMBSTONE_DAYS = 60;
   const ms = (v) => (typeof v === "number" && isFinite(v) ? Math.trunc(v) : 0);
@@ -62,10 +64,14 @@
     const mergeCategory = (a, b) => clone(ms(a.u) >= ms(b.u) ? a : b);
 
     const result = {};
-    for (const [k, v] of Object.entries(remote)) if (!["products", "categories", "deleted"].includes(k)) result[k] = clone(v);
+    for (const [k, v] of Object.entries(remote)) if (!["products", "categories", "deleted", "outfits", "prefs"].includes(k)) result[k] = clone(v);
     result.version = 2;
     result.products = combine(local.products, remote.products, mergeProduct);
     result.categories = combine(local.categories, remote.categories, mergeCategory);
+    result.outfits = combine(local.outfits, remote.outfits, mergeCategory);
+    // settings shared by all devices (budget, size per shop ...): the newest copy wins
+    const lp = local.prefs || {}, rp = remote.prefs || {};
+    result.prefs = clone(ms(lp.u) > ms(rp.u) ? lp : rp);
     // the same link added on two devices before they met: keep one record (the oldest), merged
     const byKey = new Map();
     for (const p of result.products) if (p.key) { if (!byKey.has(p.key)) byKey.set(p.key, []); byKey.get(p.key).push(p); }
@@ -90,6 +96,8 @@
     const catIds = new Set(result.categories.map((c) => c.id));
     for (const c of result.categories) if (c.parent_id && !catIds.has(c.parent_id)) c.parent_id = null;
     for (const p of result.products) if (p.category_id && !catIds.has(p.category_id)) p.category_id = null;
+    const prodIds = new Set(result.products.map((p) => p.id));
+    for (const o of result.outfits) o.items = (o.items || []).filter((i) => prodIds.has(i));
     result.deleted = deleted;
     return result;
   }

@@ -1,6 +1,6 @@
 // Keeps the app itself available offline. The list is never cached here (it lives in localStorage
 // and comes from GitHub), and new versions of the app are picked up on the next open.
-const CACHE = "wishlist-v3";
+const CACHE = "wishlist-v4";
 const SHELL = ["./", "index.html", "app.css", "app.js", "merge.js", "manifest.webmanifest", "icon-192.png", "logo-96.png", "apple-touch-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener("activate", (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
