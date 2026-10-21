@@ -66,6 +66,27 @@
     result.version = 2;
     result.products = combine(local.products, remote.products, mergeProduct);
     result.categories = combine(local.categories, remote.categories, mergeCategory);
+    // the same link added on two devices before they met: keep one record (the oldest), merged
+    const byKey = new Map();
+    for (const p of result.products) if (p.key) { if (!byKey.has(p.key)) byKey.set(p.key, []); byKey.get(p.key).push(p); }
+    for (const group of byKey.values()) {
+      if (group.length < 2) continue;
+      group.sort((a, b) => { const x = String(a.added_at ?? ""), y = String(b.added_at ?? "");
+        if (x !== y) return x < y ? -1 : 1; return String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0; });
+      const keep = group[0];
+      for (const other of group.slice(1)) {
+        const bought = keep.bought || other.bought;
+        const merged = mergeProduct(keep, other);
+        merged.id = keep.id; merged.added_at = keep.added_at;
+        if (bought && !merged.bought) merged.bought = clone(bought);
+        if (!merged.image_urls || !merged.image_urls.length) merged.image_urls = clone(other.image_urls || keep.image_urls || []);
+        for (const k of Object.keys(keep)) delete keep[k];
+        Object.assign(keep, merged);
+        deleted[other.id] = Math.max(deleted[other.id] || 0, ms(keep.u), ms(other.u)) + 1;
+      }
+      const gone = new Set(group.slice(1).map((o) => o.id));
+      result.products = result.products.filter((x) => !gone.has(x.id));
+    }
     const catIds = new Set(result.categories.map((c) => c.id));
     for (const c of result.categories) if (c.parent_id && !catIds.has(c.parent_id)) c.parent_id = null;
     for (const p of result.products) if (p.category_id && !catIds.has(p.category_id)) p.category_id = null;
