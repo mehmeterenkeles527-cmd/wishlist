@@ -293,3 +293,6 @@ button.tile { text-align: left; width: 100%; }
 .pick .check { font-weight: 800; color: var(--drop); width: 20px; }
 .url-box { min-height: 64px; font-size: 15px; }
 .tab { min-width: 60px; }
+.old-ntfy summary { list-style: none; cursor: pointer; }
+.old-ntfy summary::-webkit-details-marker { display: none; }
+.old-ntfy[open] summary .v { transform: rotate(90deg); }

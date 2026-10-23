@@ -6,7 +6,7 @@
 const DEFAULT_REPO = "mehmeterenkeles527-cmd/wishlist-veri";
 const DATA_PATH = "data/wishlist.json";
 const CONFIG_PATH = "data/config.json";
-const LS = { token: "wl.token", repo: "wl.repo", doc: "wl.doc", dirty: "wl.dirty", view: "wl.view", outbox: "wl.outbox" };
+const LS = { token: "wl.token", repo: "wl.repo", doc: "wl.doc", dirty: "wl.dirty", view: "wl.view", outbox: "wl.outbox", push: "wl.push", pushKey: "wl.pushKey" };
 const TRACKING = new Set(["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "yclid",
   "msclkid", "ref", "ref_", "tag", "boutiqueId", "merchantId", "sav", "_gl", "igshid", "si"]);
 
@@ -184,6 +184,62 @@ async function writeFile(p, data, sha, message) {
   const r = await gh(`contents/${p}`, { method: "PUT", body: JSON.stringify(body) });
   return r.content.sha;
 }
+/* ------------------------------------------------------------------ app notifications (Web Push) */
+const PUSH_PATH = "data/push.json";
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const deviceName = () => /iPhone/.test(navigator.userAgent) ? "iPhone" : /iPad/.test(navigator.userAgent) ? "iPad" : /Mac/.test(navigator.userAgent) ? "Mac" : "Cihaz";
+function keyBytes(b64) { const s = (b64 + "=".repeat((4 - b64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"); return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); }
+async function swReg() { return navigator.serviceWorker.ready; }
+async function savePushSub(sub, remove = false) {
+  const j = sub.toJSON ? sub.toJSON() : sub;
+  for (let i = 0; i < 4; i++) {
+    const { data, sha } = await readFile(PUSH_PATH);
+    const subs = ((data && data.subs) || []).filter((x) => x.endpoint !== j.endpoint);
+    if (!remove) subs.push({ endpoint: j.endpoint, keys: j.keys, device: deviceName(), added: nowIso() });
+    try { await writeFile(PUSH_PATH, { subs }, sha, remove ? "Bildirimler kapatıldı" : `Bildirimler açıldı: ${deviceName()}`); lsSet(LS.push, remove ? "" : j.endpoint); return; }
+    catch (e) { if (e.status !== 409 && e.status !== 422) throw e; }
+  }
+  throw new Error("kaydedilemedi");
+}
+async function pushState() {
+  if (!pushSupported()) return "unsupported";
+  if (isIOS && !standalone()) return "safari";
+  if (Notification.permission === "denied") return "denied";
+  try { const sub = await (await swReg()).pushManager.getSubscription(); return sub && Notification.permission === "granted" ? "on" : "off"; } catch { return "off"; }
+}
+async function enablePush() {
+  const perm = await Notification.requestPermission();   // first: iOS only asks right after a tap
+  if (perm !== "granted") { toast("İzin verilmedi — iPhone Ayarlar › Bildirimler › Wishlist'ten açabilirsin"); renderSettings(); return; }
+  try {
+    if (!(S.cfg || {}).vapid_public) S.cfg = (await readFile(CONFIG_PATH)).data || {};
+    const key = (S.cfg || {}).vapid_public;
+    if (!key) { dispatch("push_test", {}).catch(() => {}); toast("Bildirim anahtarı hazırlanıyor, 2 dakika sonra tekrar dokun"); renderSettings(); return; }
+    const reg = await swReg();
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && lsGet(LS.pushKey, "") !== key) { await sub.unsubscribe(); sub = null; }
+    sub = sub || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+    lsSet(LS.pushKey, key);
+    await savePushSub(sub);
+    await dispatch("push_test", {});
+    toast("Açıldı ✓ Test bildirimi 1 dakika içinde gelir");
+  } catch (e) { toast("Açılamadı: " + (e.message || e)); }
+  renderSettings();
+}
+async function disablePush() {
+  try { const sub = await (await swReg()).pushManager.getSubscription(); if (sub) { await savePushSub(sub, true); await sub.unsubscribe(); } toast("Bu cihazda bildirimler kapandı"); }
+  catch (e) { toast("Kapatılamadı: " + (e.message || e)); }
+  renderSettings();
+}
+async function refreshPushSub() {   // the browser can renew a subscription; keep the cloud's copy current
+  try {
+    if (!pushSupported() || Notification.permission !== "granted") return;
+    const sub = await (await swReg()).pushManager.getSubscription();
+    if (sub && sub.endpoint !== lsGet(LS.push, "")) await savePushSub(sub);
+  } catch {}
+}
+
 const dispatch = (event_type, client_payload) => gh("dispatches", { method: "POST", body: JSON.stringify({ event_type, client_payload }) });
 
 /* ------------------------------------------------------------------ sync */
@@ -556,6 +612,17 @@ function renderSettings() {
       <div class="set-row"><span>Son eşitleme</span><span class="v">${S.lastSync ? ago(S.lastSync) : "—"}</span></div>
       <button class="set-row" id="s-check"><span>Tüm fiyatları şimdi kontrol et<small>Bulutta çalışır, birkaç dakika sürer</small></span><span class="v">›</span></button>
     </div>
+    <div class="sec-title">Bildirimler</div>
+    <div class="set-group" id="push-box"><div class="set-row mut">Kontrol ediliyor…</div></div>
+    <details class="set-group old-ntfy"><summary class="set-row"><span>Eski yöntem: ntfy uygulaması<small>Uygulama bildirimleri açıksa ntfy'a artık gönderilmez</small></span><span class="v">›</span></summary>
+      <div class="set-row" style="display:block">
+      ${topic ? `<div class="howto"><ol>
+        <li>App Store'dan <b>ntfy</b> uygulamasını aç.</li>
+        <li><b>+</b> ya da <b>Subscribe to topic</b>'e dokun, aşağıdaki adı yapıştır, <b>Subscribe</b>.</li></ol>
+        <div class="copy-box" id="topic">${esc(topic)}</div>
+        <button class="act" data-copy="${esc(topic)}" style="width:100%;margin-top:6px">Adı kopyala</button></div>`
+        : `<span class="mut">Yükleniyor…</span>`}
+    </div></details>
     <div class="sec-title">Tercihler</div>
     <div class="set-group">
       <button class="set-row" data-budget><span>Aylık bütçe<small>Özet'te bu ay ne kadar harcadığını gösterir</small></span><span class="v">${pr.budget ? money(pr.budget) : "Yok"} ›</span></button>
@@ -564,17 +631,6 @@ function renderSettings() {
     <div class="sec-title">Mağazaya göre bedenin</div>
     <div class="set-group">${stores.length ? stores.map((s) => `<button class="set-row" data-sizenote="${esc(s)}"><span>${esc(s)}</span><span class="v">${esc((pr.sizes || {})[s] || "—")} ›</span></button>`).join("")
       : `<div class="set-row mut">Ürün ekledikçe mağazalar burada görünür.</div>`}</div>
-    <div class="sec-title">Bildirimler</div>
-    <div class="set-group"><div class="set-row" style="display:block">
-      ${topic ? `<div class="howto"><ol>
-        <li>App Store'dan <b>ntfy</b> uygulamasını aç.</li>
-        <li><b>+</b> ya da <b>Subscribe to topic</b>'e dokun, aşağıdaki adı yapıştır, <b>Subscribe</b>.</li>
-        <li>Bildirim izni sorarsa <b>İzin Ver</b>.</li></ol>
-        <div class="copy-box" id="topic">${esc(topic)}</div>
-        <button class="act" data-copy="${esc(topic)}" style="width:100%;margin-top:6px">Adı kopyala</button>
-        <p class="mut" style="font-size:12px">Fiyat düşünce, hedefe inince, stoğa ya da bedenin stoğa girince, aldığın ürün ucuzlayınca haber verir.</p></div>`
-        : `<span class="mut">Bildirim ayarı yükleniyor…</span>`}
-    </div></div>
     <div class="sec-title">Paylaş menüsüne ekle</div>
     <div class="set-group"><div class="set-row" style="display:block"><div class="howto">
       <p>Trendyol, Zara ya da Safari'de <b>Paylaş › Wishlist'e ekle</b> için bir kere bir Kestirme kur:</p><ol>
@@ -596,6 +652,21 @@ function renderSettings() {
       <button class="set-row danger" id="s-logout">Bu telefonda oturumu kapat</button>
     </div>
     <p class="mut" style="font-size:12px;text-align:center">Eren's Wishlist · iPhone</p>`;
+  renderPushBox();
+}
+async function renderPushBox() {
+  const st = await pushState(), el = $("#push-box"); if (!el) return;
+  const msg = {
+    on: `<div class="set-row"><span><b class="ok">● Bu ${deviceName()} bildirim alıyor</b><small>Bildirime dokununca direkt bu uygulama açılır</small></span></div>
+      <button class="set-row" data-pushtest><span>Test bildirimi gönder<small>1 dakika içinde gelir</small></span><span class="v">›</span></button>
+      <button class="set-row danger" data-pushoff>Bu cihazda bildirimleri kapat</button>`,
+    off: `<div class="set-row" style="display:block"><p style="margin:0 0 10px">Fiyat düşünce, hedefe inince, bedenin stoğa girince <b>bu uygulama</b> haber versin. Bildirime dokununca Safari değil direkt uygulama açılır.</p>
+      <button class="chrome-btn wide" data-pushon>🔔 Bildirimleri aç</button></div>`,
+    safari: `<div class="set-row" style="display:block">Şu an Safari'desin. Bildirimleri açmak için bu sayfayı <b>ana ekrandaki Wishlist</b> uygulamasından aç, Ayarlar › Bildirimler.</div>`,
+    denied: `<div class="set-row" style="display:block">Bildirim izni kapalı. <b>iPhone Ayarlar › Bildirimler › Wishlist</b>'ten aç, sonra buraya dön.</div>`,
+    unsupported: `<div class="set-row" style="display:block">Bu tarayıcı uygulama bildirimlerini desteklemiyor. iPhone'da iOS 16.4 ve üstü gerekir; aşağıdaki ntfy yöntemi çalışır.</div>`,
+  }[st];
+  el.innerHTML = msg;
 }
 
 /* ------------------------------------------------------------------ detail sheet */
@@ -926,6 +997,9 @@ document.addEventListener("click", (e) => {
     const v = prompt(`${st}'da hangi bedeni giyiyorsun? (ör. M, 32/32, 43)`, cur); if (v === null) return;
     setPref((x) => { x.sizes = x.sizes || {}; if (v.trim()) x.sizes[st] = v.trim().slice(0, 30); else delete x.sizes[st]; }, "Kaydedildi"); return; }
   if (d.wrapped !== undefined) { toast("Hazırlanıyor…"); wrapped().catch(() => toast("Resim oluşturulamadı")); return; }
+  if (d.pushon !== undefined) { t.disabled = true; t.textContent = "Açılıyor…"; enablePush(); return; }
+  if (d.pushoff !== undefined) { disablePush(); return; }
+  if (d.pushtest !== undefined) { dispatch("push_test", {}).then(() => toast("Gönderildi, 1 dakika içinde gelir"), () => toast("Gönderilemedi — internet?")); return; }
   if (d.copy !== undefined) { navigator.clipboard.writeText(d.copy).then(() => toast("Kopyalandı"), () => toast("Kopyalanamadı — basılı tutup kopyala")); return; }
 });
 $("#scrim").addEventListener("click", closeSheets);
@@ -995,7 +1069,11 @@ $("#connect-btn").addEventListener("click", async () => {
 });
 
 (function start() {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // a tapped notification while the app is already open
+    navigator.serviceWorker.addEventListener("message", (e) => { const id = e.data && e.data.open; if (id && S.token) { switchTab("list"); sync(); setTimeout(() => openDetail(id), 50); } });
+  }
   const params = new URLSearchParams(location.search);
   if (!S.token) { showSetup(); return; }
   $("#app").hidden = false;
@@ -1003,6 +1081,7 @@ $("#connect-btn").addEventListener("click", async () => {
   $("#search").value = S.view.q || "";
   render();
   sync();
+  refreshPushSub();
   if (params.get("add")) { openAdd(params.get("add")); history.replaceState(null, "", location.pathname); }
   const m = location.hash.match(/p=([\w-]+)/); if (m) setTimeout(() => openDetail(m[1]), 50);
 })();
